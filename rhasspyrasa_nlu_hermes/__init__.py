@@ -28,7 +28,7 @@ from rhasspyhermes.nlu import (
     NluTrainSuccess,
 )
 from rhasspynlu import Sentence
-from rhasspynlu.intent import Recognition
+from rhasspynlu.intent import Recognition, Entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,142 +94,116 @@ class NluHermesMqtt:
 
     # -------------------------------------------------------------------------
 
-    async def handle_query(self, query: NluQuery):
+    async def handle_query(
+        self, query: NluQuery
+    ) -> typing.AsyncIterable[
+        typing.Union[
+            NluIntentParsed,
+            typing.Tuple[NluIntent, TopicArgs],
+            NluIntentNotRecognized,
+            NluError,
+        ]
+    ]:
         """Do intent recognition."""
-        # try:
-        # if not self.intent_graph and self.graph_path and self.graph_path.is_file():
-        #     # Load graph from file
-        #     with open(self.graph_path, "r") as graph_file:
-        #         self.intent_graph = rhasspynlu.json_to_graph(json.load(graph_file))
+        try:
+            original_input = query.input
 
-        # if self.intent_graph:
+            # Replace digits with words
+            if self.replace_numbers:
+                # Have to assume whitespace tokenization
+                words = rhasspynlu.replace_numbers(
+                    query.input.split(), self.number_language
+                )
+                query.input = " ".join(words)
 
-        #     def intent_filter(intent_name: str) -> bool:
-        #         """Filter out intents."""
-        #         if query.intentFilter:
-        #             return intent_name in query.intentFilter
-        #         return True
+            input_text = query.input
 
-        #     original_input = query.input
+            # Fix casing for output event
+            if self.word_transform:
+                input_text = self.word_transform(input_text)
 
-        #     # Replace digits with words
-        #     if self.replace_numbers:
-        #         # Have to assume whitespace tokenization
-        #         words = rhasspynlu.replace_numbers(query.input.split(), self.number_language)
-        #         query.input = " ".join(words)
+            parse_url = urljoin(self.rasa_url, "model/parse")
+            _LOGGER.debug(parse_url)
 
-        #     input_text = query.input
+            async with self.http_session.post(
+                parse_url,
+                json={"text": input_text, "project": self.rasa_project},
+                ssl=self.ssl_context,
+            ) as response:
+                response.raise_for_status()
+                intent_json = await response.json()
+                intent = intent_json.get("intent", {})
+                intent_name = intent.get("name", "")
 
-        #     # Fix casing for output event
-        #     if self.word_transform:
-        #         input_text = self.word_transform(input_text)
+                if intent_name:
+                    confidence_score = float(intent.get("confidence", 0.0))
+                    slots = [
+                        Slot(
+                            entity=e.get("entity", ""),
+                            slotName=e.get("entity", ""),
+                            confidence=float(e.get("confidence", 0.0)),
+                            value=e.get("value", ""),
+                            raw_value=e.get("value", ""),
+                            range=SlotRange(
+                                start=int(e.get("start", 0)),
+                                end=int(e.get("end", 1)),
+                                raw_start=int(e.get("start", 0)),
+                                raw_end=int(e.get("end", 1)),
+                            ),
+                        )
+                        for e in intent_json.get("entities", [])
+                    ]
 
-        #     # Pass in raw query input so raw values will be correct
-        #     recognitions = recognize(
-        #         query.input,
-        #         self.intent_graph,
-        #         intent_filter=intent_filter,
-        #         word_transform=self.word_transform,
-        #         fuzzy=self.fuzzy,
-        #     )
-        # else:
-        #     _LOGGER.error("No intent graph loaded")
-        #     recognitions = []
+                    # intentParsed
+                    yield NluIntentParsed(
+                        input=input_text,
+                        id=query.id,
+                        siteId=query.siteId,
+                        sessionId=query.sessionId,
+                        intent=Intent(
+                            intentName=intent_name, confidenceScore=confidence_score
+                        ),
+                        slots=slots,
+                    )
 
-        # if recognitions:
-        #     # Use first recognition only.
-        #     recognition = recognitions[0]
-        #     assert recognition is not None
-        #     assert recognition.intent is not None
-
-        #     # intentParsed
-        #     self.publish(
-        #         NluIntentParsed(
-        #             input=input_text,
-        #             id=query.id,
-        #             siteId=query.siteId,
-        #             sessionId=query.sessionId,
-        #             intent=Intent(
-        #                 intentName=recognition.intent.name,
-        #                 confidenceScore=recognition.intent.confidence,
-        #             ),
-        #             slots=[
-        #                 Slot(
-        #                     entity=e.entity,
-        #                     slotName=e.entity,
-        #                     confidence=1,
-        #                     value=e.value,
-        #                     raw_value=e.raw_value,
-        #                     range=SlotRange(
-        #                         start=e.start,
-        #                         end=e.end,
-        #                         raw_start=e.raw_start,
-        #                         raw_end=e.raw_end,
-        #                     ),
-        #                 )
-        #                 for e in recognition.entities
-        #             ],
-        #         )
-        #     )
-
-        #     # intent
-        #     self.publish(
-        #         NluIntent(
-        #             input=input_text,
-        #             id=query.id,
-        #             siteId=query.siteId,
-        #             sessionId=query.sessionId,
-        #             intent=Intent(
-        #                 intentName=recognition.intent.name,
-        #                 confidenceScore=recognition.intent.confidence,
-        #             ),
-        #             slots=[
-        #                 Slot(
-        #                     entity=e.entity,
-        #                     slotName=e.entity,
-        #                     confidence=1,
-        #                     value=e.value,
-        #                     raw_value=e.raw_value,
-        #                     range=SlotRange(
-        #                         start=e.start,
-        #                         end=e.end,
-        #                         raw_start=e.raw_start,
-        #                         raw_end=e.raw_end,
-        #                     ),
-        #                 )
-        #                 for e in recognition.entities
-        #             ],
-        #             asrTokens=input_text.split(),
-        #             rawAsrTokens=original_input.split(),
-        #         ),
-        #         intentName=recognition.intent.name,
-        #     )
-        # else:
-        #     # Not recognized
-        #     self.publish(
-        #         NluIntentNotRecognized(
-        #             input=query.input,
-        #             id=query.id,
-        #             siteId=query.siteId,
-        #             sessionId=query.sessionId,
-        #         )
-        #     )
-        # except Exception as e:
-        #     _LOGGER.exception("nlu query")
-        #     self.publish(
-        #         NluError(
-        #             siteId=query.siteId,
-        #             sessionId=query.sessionId,
-        #             error=str(e),
-        #             context="",
-        #         )
-        #     )
+                    # intent
+                    yield (
+                        NluIntent(
+                            input=input_text,
+                            id=query.id,
+                            siteId=query.siteId,
+                            sessionId=query.sessionId,
+                            intent=Intent(
+                                intentName=intent_name, confidenceScore=confidence_score
+                            ),
+                            slots=slots,
+                            asrTokens=input_text.split(),
+                            rawAsrTokens=original_input.split(),
+                        ),
+                        {"intentName": intent_name},
+                    )
+                else:
+                    # Not recognized
+                    yield NluIntentNotRecognized(
+                        input=query.input,
+                        id=query.id,
+                        siteId=query.siteId,
+                        sessionId=query.sessionId,
+                    )
+        except Exception as e:
+            _LOGGER.exception("nlu query")
+            yield NluError(
+                siteId=query.siteId,
+                sessionId=query.sessionId,
+                error=str(e),
+                context=query.input,
+            )
 
     # -------------------------------------------------------------------------
 
     async def handle_train(
         self, train: NluTrain, siteId: str = "default"
-    ) -> typing.Iterable[
+    ) -> typing.AsyncIterable[
         typing.Union[typing.Tuple[NluTrainSuccess, TopicArgs], NluError]
     ]:
         """Transform sentences to intent graph"""
@@ -252,22 +226,24 @@ class NluHermesMqtt:
 
             if self.examples_md_path is not None:
                 # Use user-specified file
-                examples_md_file = open(self.examples_md_path, "w")
+                examples_md_file = open(self.examples_md_path, "w+")
             else:
                 # Use temporary file
-                examples_md_file = tempfile.TemporaryFile(mode="w")
+                examples_md_file = typing.cast(
+                    typing.TextIO, tempfile.TemporaryFile(mode="w+")
+                )
 
-            # Write to YAML/Markdown file
             with examples_md_file:
+                # Write to YAML/Markdown file
                 for intent_name, intent_sents in sentences_by_intent.items():
                     # Rasa Markdown training format
                     print(f"## intent:{intent_name}", file=examples_md_file)
                     for intent_sent in intent_sents:
                         raw_index = 0
                         index_entity = {e.raw_start: e for e in intent_sent.entities}
-                        entity = None
-                        sentence_tokens = []
-                        entity_tokens = []
+                        entity: typing.Optional[Entity] = None
+                        sentence_tokens: typing.List[str] = []
+                        entity_tokens: typing.List[str] = []
                         for raw_token in intent_sent.raw_tokens:
                             token = raw_token
                             if entity and (raw_index >= entity.raw_end):
@@ -307,27 +283,29 @@ class NluHermesMqtt:
                     # Newline between intents
                     print("", file=examples_md_file)
 
-            # Create training YAML file
-            with tempfile.NamedTemporaryFile(
-                suffix=".json", mode="w+", delete=False
-            ) as training_file:
+                # Create training YAML file
+                with tempfile.NamedTemporaryFile(
+                    suffix=".json", mode="w+", delete=False
+                ) as training_file:
 
-                training_config = io.StringIO()
+                    training_config = io.StringIO()
 
-                if self.config_path:
-                    # Use provided config
-                    with open(self.config_path, "r") as config_file:
-                        # Copy verbatim
-                        for line in config_file:
-                            training_config.write(line)
-                else:
-                    # Use default config
-                    training_config.write(f'language: "{self.rasa_language}"\n')
-                    training_config.write('pipeline: "pretrained_embeddings_spacy"\n')
+                    if self.config_path:
+                        # Use provided config
+                        with open(self.config_path, "r") as config_file:
+                            # Copy verbatim
+                            for line in config_file:
+                                training_config.write(line)
+                    else:
+                        # Use default config
+                        training_config.write(f'language: "{self.rasa_language}"\n')
+                        training_config.write(
+                            'pipeline: "pretrained_embeddings_spacy"\n'
+                        )
 
-                # Write markdown directly into YAML.
-                # Because reasons.
-                with open(self.examples_md_path, "r") as examples_md_file:
+                    # Write markdown directly into YAML.
+                    # Because reasons.
+                    examples_md_file.seek(0)
                     blank_line = False
                     for line in examples_md_file:
                         line = line.strip()
@@ -340,48 +318,58 @@ class NluHermesMqtt:
                         else:
                             blank_line = True
 
-                # Do training via HTTP API
-                training_url = urljoin(self.rasa_url, "model/train")
-                training_file.seek(0)
-                with open(training_file.name, "rb") as training_data:
+                    # Do training via HTTP API
+                    training_file.seek(0)
+                    with open(training_file.name, "rb") as training_data:
 
-                    training_body = {
-                        "config": training_config.getvalue(),
-                        "nlu": training_data.read().decode("utf-8"),
-                    }
-                    training_config.close()
+                        training_body = {
+                            "config": training_config.getvalue(),
+                            "nlu": training_data.read().decode("utf-8"),
+                        }
+                        training_config.close()
 
-                    try:
                         # POST training data
-                        async with self.http_session.post(
-                            training_url,
-                            json=training_body,
-                            params=json.dumps({"project": self.rasa_project}),
-                            ssl=self.ssl_context,
-                        ) as response:
-                            response.raise_for_status()
+                        training_response: typing.Optional[bytes] = None
 
-                            model_file = os.path.join(
-                                self.rasa_model_dir, response.headers["filename"]
-                            )
-                            self._logger.debug("Received model %s", model_file)
-
-                            # Replace model with PUT.
-                            # Do we really have to do this?
-                            model_url = urljoin(self.rasa_url, "model")
-                            async with self.http_session.put(
-                                model_url, json={"model_file": model_file}
+                        try:
+                            training_url = urljoin(self.rasa_url, "model/train")
+                            _LOGGER.debug(training_url)
+                            async with self.http_session.post(
+                                training_url,
+                                json=training_body,
+                                params=json.dumps({"project": self.rasa_project}),
+                                ssl=self.ssl_context,
                             ) as response:
+                                training_response = await response.read()
                                 response.raise_for_status()
-                    except Exception:
-                        # Rasa gives quite helpful error messages, so extract them from the response.
-                        _LOGGER.exception("handle_train")
-                        raise Exception(
-                            f'{response.reason}: {json.loads(response.content)["message"]}'
-                        )
+
+                                model_file = os.path.join(
+                                    self.rasa_model_dir, response.headers["filename"]
+                                )
+                                _LOGGER.debug("Received model %s", model_file)
+
+                                # Replace model with PUT.
+                                # Do we really have to do this?
+                                model_url = urljoin(self.rasa_url, "model")
+                                _LOGGER.debug(model_url)
+                                async with self.http_session.put(
+                                    model_url, json={"model_file": model_file}
+                                ) as response:
+                                    response.raise_for_status()
+                        except Exception as e:
+                            if training_response:
+                                _LOGGER.exception("rasa train")
+
+                                # Rasa gives quite helpful error messages, so extract them from the response.
+                                error_message = json.loads(training_response)["message"]
+                                raise Exception(f"{response.reason}: {error_message}")
+
+                            # Empty response; re-raise exception
+                            raise e
 
             yield (NluTrainSuccess(id=train.id), {"siteId": siteId})
         except Exception as e:
+            _LOGGER.exception("handle_train")
             yield NluError(
                 siteId=siteId, error=str(e), context=train.id, sessionId=train.id
             )
@@ -506,12 +494,12 @@ class NluHermesMqtt:
             # Use generator
             paths = nx.all_simple_paths(intent_graph, start_node, end_node)
 
-        # TODO: Add converters
         for path in paths:
             _, recognition = rhasspynlu.fsticuffs.path_to_recognition(
                 path, intent_graph, extra_converters=extra_converters
             )
             assert recognition, "Path failed"
-            sentences_by_intent[recognition.intent.name].append(recognition)
+            if recognition.intent:
+                sentences_by_intent[recognition.intent.name].append(recognition)
 
         return sentences_by_intent
