@@ -17,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser(prog="rhasspy-rasa-nlu-hermes")
     parser.add_argument("--rasa-url", required=True, help="URL of Rasa NLU server")
     parser.add_argument("--intent-graph", help="Path to rhasspy intent graph JSON file")
+    parser.add_argument("--examples-path", help="Path to write examples markdown file")
     parser.add_argument("--rasa-config", help="Path to Rasa NLU's config.yml file")
     parser.add_argument(
         "--rasa-project",
@@ -85,6 +86,9 @@ def main():
         if args.intent_graph:
             args.intent_graph = Path(args.intent_graph)
 
+        if args.examples_path:
+            args.examples_path = Path(args.examples_path)
+
         if args.rasa_config:
             args.rasa_config = Path(args.rasa_config)
 
@@ -94,6 +98,7 @@ def main():
             client,
             args.rasa_url,
             graph_path=args.intent_graph,
+            examples_md_path=args.examples_path,
             config_path=args.rasa_config,
             write_graph=args.write_graph,
             word_transform=get_word_transform(args.casing),

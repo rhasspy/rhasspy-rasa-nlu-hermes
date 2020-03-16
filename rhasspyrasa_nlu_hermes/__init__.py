@@ -49,6 +49,7 @@ class NluHermesMqtt:
         rasa_url: str,
         config_path: typing.Optional[Path] = None,
         intent_graph: typing.Optional[nx.DiGraph] = None,
+        examples_md_path: typing.Optional[Path] = None,
         graph_path: typing.Optional[Path] = None,
         write_graph: bool = False,
         default_entities: typing.Dict[str, typing.Iterable[Sentence]] = None,
@@ -89,7 +90,7 @@ class NluHermesMqtt:
         self.http_session = aiohttp.ClientSession()
 
         # Create markdown examples
-        self.examples_md_path = Path("intent_examples.md")
+        self.examples_md_path = examples_md_path
 
     # -------------------------------------------------------------------------
 
@@ -249,8 +250,15 @@ class NluHermesMqtt:
                 self.intent_graph
             )
 
+            if self.examples_md_path is not None:
+                # Use user-specified file
+                examples_md_file = open(self.examples_md_path, "w")
+            else:
+                # Use temporary file
+                examples_md_file = tempfile.TemporaryFile(mode="w")
+
             # Write to YAML/Markdown file
-            with open(self.examples_md_path, "w") as examples_md_file:
+            with examples_md_file:
                 for intent_name, intent_sents in sentences_by_intent.items():
                     # Rasa Markdown training format
                     print(f"## intent:{intent_name}", file=examples_md_file)
