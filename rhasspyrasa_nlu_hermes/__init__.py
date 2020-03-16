@@ -1,5 +1,6 @@
 """Hermes MQTT server for Rasa NLU"""
 import asyncio
+import gzip
 import io
 import json
 import logging
@@ -207,10 +208,12 @@ class NluHermesMqtt:
         typing.Union[typing.Tuple[NluTrainSuccess, TopicArgs], NluError]
     ]:
         """Transform sentences to intent graph"""
-        _LOGGER.debug("<- %s(%s)", train.__class__.__name__, train.id)
+        _LOGGER.debug("<- %s", train)
 
         try:
-            self.intent_graph = rhasspynlu.json_to_graph(train.graph_dict)
+            _LOGGER.debug("Loading %s", train.graph_path)
+            with gzip.GzipFile(train.graph_path, mode="rb") as graph_gzip:
+                self.intent_graph = nx.readwrite.gpickle.read_gpickle(graph_gzip)
 
             if self.graph_path:
                 # Write graph as JSON
