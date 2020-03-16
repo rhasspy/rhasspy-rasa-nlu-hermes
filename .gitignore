@@ -1,0 +1,11 @@
+__pycache__/
+.coverage
+coverage.xml
+.venv/
+.mypy_cache/
+debian/rhasspy-nlu-hermes*
+dist/
+*.egg-info/
+.vscode/
+pyinstaller/
+download/
