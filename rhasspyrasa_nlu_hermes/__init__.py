@@ -14,10 +14,10 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 import aiohttp
-import attr
 import networkx as nx
 import rhasspynlu
 from rhasspyhermes.base import Message
+from rhasspyhermes.client import HermesClient, TopicArgs
 from rhasspyhermes.intent import Intent, Slot, SlotRange
 from rhasspyhermes.nlu import (
     NluError,
@@ -29,19 +29,14 @@ from rhasspyhermes.nlu import (
     NluTrainSuccess,
 )
 from rhasspynlu import Sentence
-from rhasspynlu.intent import Recognition, Entity
+from rhasspynlu.intent import Entity, Recognition
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging.getLogger("rhasspyrasa_nlu_hermes")
 
 # -----------------------------------------------------------------------------
 
-TopicArgs = typing.Mapping[str, typing.Any]
-GeneratorType = typing.AsyncIterable[
-    typing.Union[Message, typing.Tuple[Message, TopicArgs]]
-]
 
-
-class NluHermesMqtt:
+class NluHermesMqtt(HermesClient):
     """Hermes MQTT server for Rasa NLU."""
 
     def __init__(
@@ -65,7 +60,10 @@ class NluHermesMqtt:
         siteIds: typing.Optional[typing.List[str]] = None,
         loop=None,
     ):
-        self.client = client
+        super().__init__("rhasspyrasa_nlu_hermes", client, siteIds=siteIds, loop=loop)
+
+        self.subscribe(NluQuery, NluTrain)
+
         self.rasa_url = rasa_url
         self.graph_path = graph_path
         self.config_path = config_path
@@ -78,7 +76,6 @@ class NluHermesMqtt:
         self.rasa_language = rasa_language
         self.rasa_project = rasa_project
         self.rasa_model_dir = rasa_model_dir
-        self.siteIds = siteIds or []
 
         # SSL
         self.ssl_context = ssl.SSLContext()
@@ -208,19 +205,10 @@ class NluHermesMqtt:
         typing.Union[typing.Tuple[NluTrainSuccess, TopicArgs], NluError]
     ]:
         """Transform sentences to intent graph"""
-        _LOGGER.debug("<- %s", train)
-
         try:
             _LOGGER.debug("Loading %s", train.graph_path)
             with gzip.GzipFile(train.graph_path, mode="rb") as graph_gzip:
                 self.intent_graph = nx.readwrite.gpickle.read_gpickle(graph_gzip)
-
-            if self.graph_path:
-                # Write graph as JSON
-                with open(self.graph_path, "w") as graph_file:
-                    json.dump(train.graph_dict, graph_file)
-
-                    _LOGGER.debug("Wrote %s", str(self.graph_path))
 
             # Build Markdown sentences
             sentences_by_intent = NluHermesMqtt.make_sentences_by_intent(
@@ -379,85 +367,23 @@ class NluHermesMqtt:
 
     # -------------------------------------------------------------------------
 
-    def on_connect(self, client, userdata, flags, rc):
-        """Connected to MQTT broker."""
-        try:
-            topics = [NluQuery.topic()]
-
-            if self.siteIds:
-                # Specific siteIds
-                topics.extend(
-                    [NluTrain.topic(siteId=siteId) for siteId in self.siteIds]
-                )
-            else:
-                # All siteIds
-                topics.append(NluTrain.topic(siteId="+"))
-
-            for topic in topics:
-                self.client.subscribe(topic)
-                _LOGGER.debug("Subscribed to %s", topic)
-        except Exception:
-            _LOGGER.exception("on_connect")
-
-    def on_message(self, client, userdata, msg):
+    async def on_message(
+        self,
+        message: Message,
+        siteId: typing.Optional[str] = None,
+        sessionId: typing.Optional[str] = None,
+        topic: typing.Optional[str] = None,
+    ):
         """Received message from MQTT broker."""
-        try:
-            _LOGGER.debug("Received %s byte(s) on %s", len(msg.payload), msg.topic)
-            if msg.topic == NluQuery.topic():
-                json_payload = json.loads(msg.payload)
-
-                # Check siteId
-                if not self._check_siteId(json_payload):
-                    return
-
-                query = NluQuery.from_dict(json_payload)
-                _LOGGER.debug("<- %s", query)
-                self.publish_all(self.handle_query(query))
-            elif NluTrain.is_topic(msg.topic):
-                siteId = NluTrain.get_siteId(msg.topic)
-                if self.siteIds and (siteId not in self.siteIds):
-                    return
-
-                json_payload = json.loads(msg.payload)
-                train = NluTrain.from_dict(json_payload)
-                self.publish_all(self.handle_train(train, siteId=siteId))
-        except Exception:
-            _LOGGER.exception("on_message")
-
-    def publish(self, message: Message, **topic_args):
-        """Publish a Hermes message to MQTT."""
-        try:
-            _LOGGER.debug("-> %s", message)
-            topic = message.topic(**topic_args)
-            payload = json.dumps(attr.asdict(message))
-            _LOGGER.debug("Publishing %s char(s) to %s", len(payload), topic)
-            self.client.publish(topic, payload)
-        except Exception:
-            _LOGGER.exception("on_message")
-
-    def publish_all(self, async_generator: GeneratorType):
-        """Publish all messages from an async generator"""
-        asyncio.run_coroutine_threadsafe(
-            self.async_publish_all(async_generator), self.loop
-        )
-
-    async def async_publish_all(self, async_generator: GeneratorType):
-        """Enumerate all messages in an async generator publish them"""
-        async for maybe_message in async_generator:
-            if isinstance(maybe_message, Message):
-                self.publish(maybe_message)
-            else:
-                message, kwargs = maybe_message
-                self.publish(message, **kwargs)
+        if isinstance(message, NluQuery):
+            await self.publish_all(self.handle_query(message))
+        elif isinstance(message, NluTrain):
+            assert siteId, "Missing siteId"
+            await self.publish_all(self.handle_train(message, siteId=siteId))
+        else:
+            _LOGGER.warning("Unexpected message: %s", message)
 
     # -------------------------------------------------------------------------
-
-    def _check_siteId(self, json_payload: typing.Dict[str, typing.Any]) -> bool:
-        if self.siteIds:
-            return json_payload.get("siteId", "default") in self.siteIds
-
-        # All sites
-        return True
 
     @classmethod
     def make_sentences_by_intent(

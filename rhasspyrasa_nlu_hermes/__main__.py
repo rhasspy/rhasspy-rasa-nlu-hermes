@@ -9,7 +9,9 @@ import paho.mqtt.client as mqtt
 
 from . import NluHermesMqtt
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging.getLogger("rhasspyrasa_nlu_hermes")
+
+# -----------------------------------------------------------------------------
 
 
 def main():
@@ -110,20 +112,8 @@ def main():
             certfile=args.certfile,
             keyfile=args.keyfile,
             siteIds=args.siteId,
+            loop=loop,
         )
-
-        def on_disconnect(client, userdata, flags, rc):
-            try:
-                # Automatically reconnect
-                _LOGGER.info("Disconnected. Trying to reconnect...")
-                client.reconnect()
-            except Exception:
-                logging.exception("on_disconnect")
-
-        # Connect
-        client.on_connect = hermes.on_connect
-        client.on_disconnect = on_disconnect
-        client.on_message = hermes.on_message
 
         _LOGGER.debug("Connecting to %s:%s", args.host, args.port)
         client.connect(args.host, args.port)
@@ -132,7 +122,7 @@ def main():
         client.loop_start()
 
         # Run event loop
-        loop.run_forever()
+        hermes.loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
