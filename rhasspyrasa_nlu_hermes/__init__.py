@@ -17,7 +17,7 @@ import aiohttp
 import networkx as nx
 import rhasspynlu
 from rhasspyhermes.base import Message
-from rhasspyhermes.client import HermesClient, TopicArgs
+from rhasspyhermes.client import GeneratorType, HermesClient, TopicArgs
 from rhasspyhermes.intent import Intent, Slot, SlotRange
 from rhasspyhermes.nlu import (
     NluError,
@@ -373,13 +373,15 @@ class NluHermesMqtt(HermesClient):
         siteId: typing.Optional[str] = None,
         sessionId: typing.Optional[str] = None,
         topic: typing.Optional[str] = None,
-    ):
+    ) -> GeneratorType:
         """Received message from MQTT broker."""
         if isinstance(message, NluQuery):
-            await self.publish_all(self.handle_query(message))
+            async for query_result in self.handle_query(message):
+                yield query_result
         elif isinstance(message, NluTrain):
             assert siteId, "Missing siteId"
-            await self.publish_all(self.handle_train(message, siteId=siteId))
+            async for train_result in self.handle_train(message, siteId=siteId):
+                yield train_result
         else:
             _LOGGER.warning("Unexpected message: %s", message)
 
