@@ -67,8 +67,6 @@ def main():
     _LOGGER.debug(args)
 
     try:
-        loop = asyncio.get_event_loop()
-
         # Convert to Paths
         if args.intent_graph:
             args.intent_graph = Path(args.intent_graph)
@@ -97,7 +95,6 @@ def main():
             certfile=args.certfile,
             keyfile=args.keyfile,
             siteIds=args.siteId,
-            loop=loop,
         )
 
         _LOGGER.debug("Connecting to %s:%s", args.host, args.port)
@@ -105,11 +102,12 @@ def main():
         client.loop_start()
 
         # Run event loop
-        hermes.loop.run_forever()
+        asyncio.run(hermes.handle_messages_async())
     except KeyboardInterrupt:
         pass
     finally:
         _LOGGER.debug("Shutting down")
+        client.loop_stop()
 
 
 # -----------------------------------------------------------------------------

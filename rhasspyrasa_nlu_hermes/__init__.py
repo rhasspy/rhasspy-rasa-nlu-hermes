@@ -1,5 +1,4 @@
 """Hermes MQTT server for Rasa NLU"""
-import asyncio
 import gzip
 import io
 import json
@@ -58,9 +57,8 @@ class NluHermesMqtt(HermesClient):
         certfile: typing.Optional[str] = None,
         keyfile: typing.Optional[str] = None,
         siteIds: typing.Optional[typing.List[str]] = None,
-        loop=None,
     ):
-        super().__init__("rhasspyrasa_nlu_hermes", client, siteIds=siteIds, loop=loop)
+        super().__init__("rhasspyrasa_nlu_hermes", client, siteIds=siteIds)
 
         self.subscribe(NluQuery, NluTrain)
 
@@ -84,11 +82,18 @@ class NluHermesMqtt(HermesClient):
             self.ssl_context.load_cert_chain(certfile, keyfile)
 
         # Async HTTP
-        self.loop = loop or asyncio.get_event_loop()
-        self.http_session = aiohttp.ClientSession()
+        self._http_session: typing.Optional[aiohttp.ClientSession] = None
 
         # Create markdown examples
         self.examples_md_path = examples_md_path
+
+    @property
+    def http_session(self):
+        """Get or create async HTTP session"""
+        if self._http_session is None:
+            self._http_session = aiohttp.ClientSession()
+
+        return self._http_session
 
     # -------------------------------------------------------------------------
 
