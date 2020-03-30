@@ -66,41 +66,41 @@ def main():
     hermes_cli.setup_logging(args)
     _LOGGER.debug(args)
 
+    # Convert to Paths
+    if args.intent_graph:
+        args.intent_graph = Path(args.intent_graph)
+
+    if args.examples_path:
+        args.examples_path = Path(args.examples_path)
+
+    if args.rasa_config:
+        args.rasa_config = Path(args.rasa_config)
+
+    # Listen for messages
+    client = mqtt.Client()
+    hermes = NluHermesMqtt(
+        client,
+        args.rasa_url,
+        graph_path=args.intent_graph,
+        examples_md_path=args.examples_path,
+        config_path=args.rasa_config,
+        write_graph=args.write_graph,
+        word_transform=get_word_transform(args.casing),
+        replace_numbers=args.replace_numbers,
+        number_language=args.number_language,
+        rasa_language=args.rasa_language,
+        rasa_project=args.rasa_project,
+        rasa_model_dir=args.rasa_model_dir,
+        certfile=args.certfile,
+        keyfile=args.keyfile,
+        siteIds=args.siteId,
+    )
+
+    _LOGGER.debug("Connecting to %s:%s", args.host, args.port)
+    hermes_cli.connect(client, args)
+    client.loop_start()
+
     try:
-        # Convert to Paths
-        if args.intent_graph:
-            args.intent_graph = Path(args.intent_graph)
-
-        if args.examples_path:
-            args.examples_path = Path(args.examples_path)
-
-        if args.rasa_config:
-            args.rasa_config = Path(args.rasa_config)
-
-        # Listen for messages
-        client = mqtt.Client()
-        hermes = NluHermesMqtt(
-            client,
-            args.rasa_url,
-            graph_path=args.intent_graph,
-            examples_md_path=args.examples_path,
-            config_path=args.rasa_config,
-            write_graph=args.write_graph,
-            word_transform=get_word_transform(args.casing),
-            replace_numbers=args.replace_numbers,
-            number_language=args.number_language,
-            rasa_language=args.rasa_language,
-            rasa_project=args.rasa_project,
-            rasa_model_dir=args.rasa_model_dir,
-            certfile=args.certfile,
-            keyfile=args.keyfile,
-            siteIds=args.siteId,
-        )
-
-        _LOGGER.debug("Connecting to %s:%s", args.host, args.port)
-        hermes_cli.connect(client, args)
-        client.loop_start()
-
         # Run event loop
         asyncio.run(hermes.handle_messages_async())
     except KeyboardInterrupt:
