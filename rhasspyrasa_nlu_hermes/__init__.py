@@ -145,13 +145,13 @@ class NluHermesMqtt(HermesClient):
                             entity=e.get("entity", ""),
                             slotName=e.get("entity", ""),
                             confidence=float(e.get("confidence", 0.0)),
-                            value=e.get("value", ""),
-                            raw_value=e.get("value", ""),
+                            value={"kind": "Unknown", "value": e.get("value", "")},
+                            rawValue=e.get("value", ""),
                             range=SlotRange(
                                 start=int(e.get("start", 0)),
                                 end=int(e.get("end", 1)),
-                                raw_start=int(e.get("start", 0)),
-                                raw_end=int(e.get("end", 1)),
+                                rawStart=int(e.get("start", 0)),
+                                rawEnd=int(e.get("end", 1)),
                             ),
                         )
                         for e in intent_json.get("entities", [])
