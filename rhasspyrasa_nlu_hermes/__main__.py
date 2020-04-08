@@ -93,7 +93,7 @@ def main():
         rasa_model_dir=args.rasa_model_dir,
         certfile=args.certfile,
         keyfile=args.keyfile,
-        siteIds=args.siteId,
+        site_ids=args.site_id,
     )
 
     _LOGGER.debug("Connecting to %s:%s", args.host, args.port)

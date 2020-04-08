@@ -56,9 +56,9 @@ class NluHermesMqtt(HermesClient):
         rasa_model_dir: str = "models",
         certfile: typing.Optional[str] = None,
         keyfile: typing.Optional[str] = None,
-        siteIds: typing.Optional[typing.List[str]] = None,
+        site_ids: typing.Optional[typing.List[str]] = None,
     ):
-        super().__init__("rhasspyrasa_nlu_hermes", client, siteIds=siteIds)
+        super().__init__("rhasspyrasa_nlu_hermes", client, site_ids=site_ids)
 
         self.subscribe(NluQuery, NluTrain)
 
@@ -143,15 +143,15 @@ class NluHermesMqtt(HermesClient):
                     slots = [
                         Slot(
                             entity=e.get("entity", ""),
-                            slotName=e.get("entity", ""),
+                            slot_name=e.get("entity", ""),
                             confidence=float(e.get("confidence", 0.0)),
                             value={"kind": "Unknown", "value": e.get("value", "")},
-                            rawValue=e.get("value", ""),
+                            raw_value=e.get("value", ""),
                             range=SlotRange(
                                 start=int(e.get("start", 0)),
                                 end=int(e.get("end", 1)),
-                                rawStart=int(e.get("start", 0)),
-                                rawEnd=int(e.get("end", 1)),
+                                raw_start=int(e.get("start", 0)),
+                                raw_end=int(e.get("end", 1)),
                             ),
                         )
                         for e in intent_json.get("entities", [])
@@ -161,10 +161,10 @@ class NluHermesMqtt(HermesClient):
                     yield NluIntentParsed(
                         input=input_text,
                         id=query.id,
-                        siteId=query.siteId,
-                        sessionId=query.sessionId,
+                        site_id=query.site_id,
+                        session_id=query.session_id,
                         intent=Intent(
-                            intentName=intent_name, confidenceScore=confidence_score
+                            intent_name=intent_name, confidence_score=confidence_score
                         ),
                         slots=slots,
                     )
@@ -174,30 +174,31 @@ class NluHermesMqtt(HermesClient):
                         NluIntent(
                             input=input_text,
                             id=query.id,
-                            siteId=query.siteId,
-                            sessionId=query.sessionId,
+                            site_id=query.site_id,
+                            session_id=query.session_id,
                             intent=Intent(
-                                intentName=intent_name, confidenceScore=confidence_score
+                                intent_name=intent_name,
+                                confidence_score=confidence_score,
                             ),
                             slots=slots,
-                            asrTokens=input_text.split(),
-                            rawAsrTokens=original_input.split(),
+                            asr_tokens=[NluIntent.make_asr_tokens(input_text.split())],
+                            raw_input=original_input,
                         ),
-                        {"intentName": intent_name},
+                        {"intent_name": intent_name},
                     )
                 else:
                     # Not recognized
                     yield NluIntentNotRecognized(
                         input=query.input,
                         id=query.id,
-                        siteId=query.siteId,
-                        sessionId=query.sessionId,
+                        site_id=query.site_id,
+                        session_id=query.session_id,
                     )
         except Exception as e:
             _LOGGER.exception("nlu query")
             yield NluError(
-                siteId=query.siteId,
-                sessionId=query.sessionId,
+                site_id=query.site_id,
+                session_id=query.session_id,
                 error=str(e),
                 context=query.input,
             )
@@ -205,7 +206,7 @@ class NluHermesMqtt(HermesClient):
     # -------------------------------------------------------------------------
 
     async def handle_train(
-        self, train: NluTrain, siteId: str = "default"
+        self, train: NluTrain, site_id: str = "default"
     ) -> typing.AsyncIterable[
         typing.Union[typing.Tuple[NluTrainSuccess, TopicArgs], NluError]
     ]:
@@ -363,11 +364,11 @@ class NluHermesMqtt(HermesClient):
                             # Empty response; re-raise exception
                             raise e
 
-            yield (NluTrainSuccess(id=train.id), {"siteId": siteId})
+            yield (NluTrainSuccess(id=train.id), {"site_id": site_id})
         except Exception as e:
             _LOGGER.exception("handle_train")
             yield NluError(
-                siteId=siteId, error=str(e), context=train.id, sessionId=train.id
+                site_id=site_id, error=str(e), context=train.id, session_id=train.id
             )
 
     # -------------------------------------------------------------------------
@@ -375,8 +376,8 @@ class NluHermesMqtt(HermesClient):
     async def on_message(
         self,
         message: Message,
-        siteId: typing.Optional[str] = None,
-        sessionId: typing.Optional[str] = None,
+        site_id: typing.Optional[str] = None,
+        session_id: typing.Optional[str] = None,
         topic: typing.Optional[str] = None,
     ) -> GeneratorType:
         """Received message from MQTT broker."""
@@ -384,8 +385,8 @@ class NluHermesMqtt(HermesClient):
             async for query_result in self.handle_query(message):
                 yield query_result
         elif isinstance(message, NluTrain):
-            assert siteId, "Missing siteId"
-            async for train_result in self.handle_train(message, siteId=siteId):
+            assert site_id, "Missing site_id"
+            async for train_result in self.handle_train(message, site_id=site_id):
                 yield train_result
         else:
             _LOGGER.warning("Unexpected message: %s", message)
