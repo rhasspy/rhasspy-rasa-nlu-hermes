@@ -145,7 +145,12 @@ class NluHermesMqtt(HermesClient):
                             entity=e.get("entity", ""),
                             slot_name=e.get("entity", ""),
                             confidence=float(e.get("confidence", 0.0)),
-                            value={"kind": "Unknown", "value": e.get("value", "")},
+                            value={
+                                "kind": "Unknown",
+                                "value": e.get("value", ""),
+                                "additional_info": e.get("additional_info", {}),
+                                "extractor": e.get("extractor", None),
+                            },
                             raw_value=e.get("value", ""),
                             range=SlotRange(
                                 start=int(e.get("start", 0)),
