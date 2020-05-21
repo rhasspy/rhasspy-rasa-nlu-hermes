@@ -138,7 +138,9 @@ class NluHermesMqtt(HermesClient):
                 intent = intent_json.get("intent", {})
                 intent_name = intent.get("name", "")
 
-                if intent_name and (query.intent_filter is None or intent_name in query.intent_filter):
+                if intent_name and (
+                    query.intent_filter is None or intent_name in query.intent_filter
+                ):
                     confidence_score = float(intent.get("confidence", 0.0))
                     slots = [
                         Slot(
