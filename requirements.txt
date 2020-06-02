@@ -1,4 +1,4 @@
 aiohttp==3.6.2
 paho-mqtt==1.5.0
-rhasspy-hermes==0.2.0
-rhasspy-nlu==0.1.8
+rhasspy-hermes==0.2.1
+rhasspy-nlu==0.1.9
