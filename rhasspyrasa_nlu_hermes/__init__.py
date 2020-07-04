@@ -20,7 +20,6 @@ from rhasspyhermes.client import GeneratorType, HermesClient, TopicArgs
 from rhasspyhermes.intent import Intent, Slot, SlotRange
 from rhasspyhermes.nlu import (
     NluError,
-    NluIntent,
     NluIntentNotRecognized,
     NluIntentParsed,
     NluQuery,
@@ -102,15 +101,12 @@ class NluHermesMqtt(HermesClient):
     ) -> typing.AsyncIterable[
         typing.Union[
             NluIntentParsed,
-            typing.Tuple[NluIntent, TopicArgs],
             NluIntentNotRecognized,
             NluError,
         ]
     ]:
         """Do intent recognition."""
         try:
-            original_input = query.input
-
             # Replace digits with words
             if self.replace_numbers:
                 # Have to assume whitespace tokenization
@@ -169,25 +165,6 @@ class NluHermesMqtt(HermesClient):
                             intent_name=intent_name, confidence_score=confidence_score
                         ),
                         slots=slots,
-                    )
-
-                    # intent
-                    yield (
-                        NluIntent(
-                            input=input_text,
-                            id=query.id,
-                            site_id=query.site_id,
-                            session_id=query.session_id,
-                            intent=Intent(
-                                intent_name=intent_name,
-                                confidence_score=confidence_score,
-                            ),
-                            slots=slots,
-                            asr_tokens=[NluIntent.make_asr_tokens(input_text.split())],
-                            raw_input=original_input,
-                            lang=query.lang,
-                        ),
-                        {"intent_name": intent_name},
                     )
                 else:
                     # Not recognized
