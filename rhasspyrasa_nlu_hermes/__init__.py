@@ -337,7 +337,9 @@ class NluHermesMqtt(HermesClient):
                             async with self.http_session.post(
                                 training_url,
                                 json=training_body,
-                                params=json.dumps({"project": self.rasa_project}),
+                                params=json.dumps(
+                                    {"project": self.rasa_project}, ensure_ascii=False
+                                ),
                                 ssl=self.ssl_context,
                             ) as response:
                                 training_response = await response.read()
