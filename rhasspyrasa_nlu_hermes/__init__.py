@@ -15,6 +15,9 @@ from urllib.parse import urljoin
 import aiohttp
 import networkx as nx
 import rhasspynlu
+from rhasspynlu import Sentence
+from rhasspynlu.intent import Entity, Recognition
+
 from rhasspyhermes.base import Message
 from rhasspyhermes.client import GeneratorType, HermesClient, TopicArgs
 from rhasspyhermes.intent import Intent, Slot, SlotRange
@@ -27,8 +30,6 @@ from rhasspyhermes.nlu import (
     NluTrain,
     NluTrainSuccess,
 )
-from rhasspynlu import Sentence
-from rhasspynlu.intent import Entity, Recognition
 
 _LOGGER = logging.getLogger("rhasspyrasa_nlu_hermes")
 
@@ -186,6 +187,7 @@ class NluHermesMqtt(HermesClient):
                             asr_tokens=[NluIntent.make_asr_tokens(input_text.split())],
                             raw_input=original_input,
                             lang=query.lang,
+                            custom_data=query.custom_data,
                         ),
                         {"intent_name": intent_name},
                     )
@@ -196,6 +198,7 @@ class NluHermesMqtt(HermesClient):
                         id=query.id,
                         site_id=query.site_id,
                         session_id=query.session_id,
+                        custom_data=query.custom_data,
                     )
         except Exception as e:
             _LOGGER.exception("nlu query")
