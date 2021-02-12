@@ -58,6 +58,7 @@ def main():
         "--number-language",
         help="Language/locale used for number replacement (default: en)",
     )
+    parser.add_argument("--lang", help="Set lang in hotword detected message")
     parser.add_argument("--certfile", help="SSL certificate file")
     parser.add_argument("--keyfile", help="SSL private key file (optional)")
 
@@ -95,6 +96,7 @@ def main():
         certfile=args.certfile,
         keyfile=args.keyfile,
         site_ids=args.site_id,
+        lang=args.lang,
     )
 
     _LOGGER.debug("Connecting to %s:%s", args.host, args.port)

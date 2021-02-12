@@ -58,6 +58,7 @@ class NluHermesMqtt(HermesClient):
         certfile: typing.Optional[str] = None,
         keyfile: typing.Optional[str] = None,
         site_ids: typing.Optional[typing.List[str]] = None,
+        lang: typing.Optional[str] = None,
     ):
         super().__init__("rhasspyrasa_nlu_hermes", client, site_ids=site_ids)
 
@@ -87,6 +88,8 @@ class NluHermesMqtt(HermesClient):
 
         # Create markdown examples
         self.examples_md_path = examples_md_path
+
+        self.lang = lang
 
     @property
     def http_session(self):
@@ -186,7 +189,7 @@ class NluHermesMqtt(HermesClient):
                             slots=slots,
                             asr_tokens=[NluIntent.make_asr_tokens(input_text.split())],
                             raw_input=original_input,
-                            lang=query.lang,
+                            lang=(query.lang or self.lang),
                             custom_data=query.custom_data,
                         ),
                         {"intent_name": intent_name},
