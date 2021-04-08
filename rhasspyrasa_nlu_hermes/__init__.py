@@ -163,6 +163,17 @@ class NluHermesMqtt(HermesClient):
                         for e in intent_json.get("entities", [])
                     ]
 
+                    if query.custom_entities:
+                        # Copy user-defined entities
+                        for entity_name, entity_value in query.custom_entities.items():
+                            slots.append(
+                                Slot(
+                                    entity=entity_name,
+                                    confidence=1.0,
+                                    value={"value": entity_value},
+                                )
+                            )
+
                     # intentParsed
                     yield NluIntentParsed(
                         input=input_text,
